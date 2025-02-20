@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:slack="http://www.mulesoft.org/schema/mule/slack"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/slack http://www.mulesoft.org/schema/mule/slack/current/mule-slack.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3a2dcaa1-dcb8-4c5e-9f3b-e5674c868a0b" >
+		<http:listener-connection protocol="HTTPS" host="localhost" port="8082" >
+			<tls:context >
+				<tls:key-store type="jks" path="keystore.jks" alias="ssl" keyPassword="123456" password="123456" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+	<slack:config name="Slack_Connector_Config" doc:name="Slack Connector Config" doc:id="68398dcf-f208-48a4-96c2-d6d4d4ef238f" >
+		<slack:slack-auth-connection >
+			<slack:oauth-authorization-code consumerKey="your-key" consumerSecret="your-secret" authorizationUrl="https://slack.com/oauth/v2/authorize" accessTokenUrl="https://slack.com/api/oauth.v2.access" scopes="chat:write" />
+			<slack:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="https://localhost:8082/callback"/>
+		</slack:slack-auth-connection>
+	</slack:config>
+	<flow name="project-mule-to-slackFlow" doc:id="e003d92a-8c05-4682-aa6a-0ce41c1a2d80" >
+		<http:listener doc:name="Listener" doc:id="1481dc1c-f635-4271-8c1a-49ef2afe3e93" config-ref="HTTP_Listener_config" path="/hello"/>
+		<ee:transform doc:name="Transform Message" doc:id="0f8c0f9a-37ea-4699-9fe0-d274ce054601" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	channel:payload.channel,
+	text:payload.text
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<slack:create-chatpost-message doc:name="Send Message" doc:id="7a8535e1-4b7a-4811-a26e-75fc898df21a" config-ref="Slack_Connector_Config"/>
+		<ee:transform doc:name="Transform Message" doc:id="ae10c740-badc-4067-bc22-b89bef6a071f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
