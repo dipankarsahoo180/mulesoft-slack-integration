@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:slack="http://www.mulesoft.org/schema/mule/slack"
-	xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
-	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:slack="http://www.mulesoft.org/schema/mule/slack"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
 http://www.mulesoft.org/schema/mule/slack http://www.mulesoft.org/schema/mule/slack/current/mule-slack.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3a2dcaa1-dcb8-4c5e-9f3b-e5674c868a0b" >
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTPS_Listener_config" doc:name="HTTP Listener config" doc:id="3a2dcaa1-dcb8-4c5e-9f3b-e5674c868a0b" >
 		<http:listener-connection protocol="HTTPS" host="localhost" port="8082" >
 			<tls:context >
 				<tls:key-store type="jks" path="keystore.jks" alias="ssl" keyPassword="123456" password="123456" />
@@ -16,21 +17,40 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 	</http:listener-config>
 	<slack:config name="Slack_Connector_Config" doc:name="Slack Connector Config" doc:id="68398dcf-f208-48a4-96c2-d6d4d4ef238f" >
 		<slack:slack-auth-connection >
-			<slack:oauth-authorization-code consumerKey="your-key" consumerSecret="your-secret" authorizationUrl="https://slack.com/oauth/v2/authorize" accessTokenUrl="https://slack.com/api/oauth.v2.access" scopes="chat:write" />
-			<slack:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="https://localhost:8082/callback"/>
+			<slack:oauth-authorization-code consumerKey="your-key" consumerSecret="your-pwd" authorizationUrl="https://slack.com/oauth/v2/authorize" accessTokenUrl="https://slack.com/api/oauth.v2.access" scopes="chat:write" />
+			<slack:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="${fullDomain}/callback"/>
 		</slack:slack-auth-connection>
 	</slack:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="38eb09ba-3136-4e61-9b2f-dd254a384e18" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="5ffa1615-fe5e-4b78-8728-1b47d8b17f5b" >
+		<salesforce:basic-connection username="your-usernam" password="your-password" securityToken="your-security-token" />
+	</salesforce:sfdc-config>
 	<flow name="project-mule-to-slackFlow" doc:id="e003d92a-8c05-4682-aa6a-0ce41c1a2d80" >
-		<http:listener doc:name="Listener" doc:id="1481dc1c-f635-4271-8c1a-49ef2afe3e93" config-ref="HTTP_Listener_config" path="/hello"/>
+		<!-- [STUDIO:"Listener"]<http:listener doc:name="Listener" doc:id="1481dc1c-f635-4271-8c1a-49ef2afe3e93" config-ref="HTTPS_Listener_config" path="/post-message"/> [STUDIO] -->
+		<http:listener doc:name="Listener" doc:id="2ea3b332-77d6-4c6d-855d-56bec8fc16fd" config-ref="HTTP_Listener_config" path="/post-message"/>
+		<salesforce:invoke-apex-rest-method doc:name="Invoke apex rest method" doc:id="424cba52-f0db-4b33-87bf-ce230a42f87f" config-ref="Salesforce_Config" className="AgentService" methodName="askAgent^/askAgent^HttpPost^String^accountName=String"/>
 		<ee:transform doc:name="Transform Message" doc:id="0f8c0f9a-37ea-4699-9fe0-d274ce054601" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
+
 ---
 {
-	channel:payload.channel,
-	text:payload.text
-}]]></ee:set-payload>
+  "channel": "updates",
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": read(payload.askAgentOutput,"application/json")[0][0]
+      }
+    }
+  ]
+}
+
+]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 		<slack:create-chatpost-message doc:name="Send Message" doc:id="7a8535e1-4b7a-4811-a26e-75fc898df21a" config-ref="Slack_Connector_Config"/>
